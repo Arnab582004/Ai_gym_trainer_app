@@ -1,23 +1,4 @@
-"""
-AI Gym Trainer Pro - GUI Application (single-file)
 
-Features:
-- Push-ups, Squats, Bicep Curls detection + rep counting
-- Keyboard + Voice control (SpeechRecognition)
-- Threaded TTS (pyttsx3)
-- Posture feedback & accuracy score
-- Calories estimator
-- Live GUI using Tkinter with embedded webcam preview
-- Save workout log to CSV
-
-Requirements:
-pip install mediapipe opencv-python numpy pyttsx3 SpeechRecognition pandas pillow
-# For PyAudio on Windows, install wheel from Gohlke if pip install fails.
-
-Run:
-python AI_Gym_Trainer_GUI.py
-
-"""
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -31,13 +12,9 @@ import time
 import pandas as pd
 from datetime import datetime
 from PIL import Image, ImageTk
-
-# ------------------ Settings / Constants ------------------
 CAL_PUSHUP = 0.4
 CAL_SQUAT  = 0.32
 CAL_CURL   = 0.2
-
-# ------------------ Utilities ------------------
 engine = pyttsx3.init()
 _engine_lock = threading.Lock()
 
@@ -64,8 +41,6 @@ def calculate_angle(a, b, c):
 
 def accuracy_from_angle(angle, low, high):
     return int(np.clip(np.interp(angle, [low, high], [100, 0]), 0, 100))
-
-# ------------------ Voice Listener ------------------
 class VoiceListener(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
@@ -98,8 +73,6 @@ class VoiceListener(threading.Thread):
 
     def stop(self):
         self._stop.set()
-
-# ------------------ Video / Pose Processor ------------------
 class PoseProcessor:
     def __init__(self, camera_index=0):
         self.cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
@@ -131,8 +104,6 @@ class PoseProcessor:
             self.pose.close()
         except Exception:
             pass
-
-# ------------------ GUI Application ------------------
 class GymApp:
     def __init__(self, root):
         self.root = root
@@ -155,15 +126,10 @@ class GymApp:
         self.current_exercise = "None"
         self.workout_log = []
         self._last_tts = 0
-
-        # UI layout
         self.setup_ui()
-
-        # Video update thread
         self.video_thread = None
 
     def setup_ui(self):
-        # Left control frame
         control = ttk.Frame(self.root, padding=6)
         control.grid(row=0, column=0, sticky='ns')
 
@@ -187,8 +153,6 @@ class GymApp:
 
         ttk.Button(control, text="Save Log Now", command=self.save_log).grid(row=8, column=0, pady=4, sticky='ew')
         ttk.Button(control, text="Exit", command=self.on_exit).grid(row=9, column=0, pady=4, sticky='ew')
-
-        # Right: video + stats
         display = ttk.Frame(self.root, padding=6)
         display.grid(row=0, column=1)
 
@@ -264,7 +228,6 @@ class GymApp:
         self.root.quit()
 
     def video_loop(self):
-        # Create a local PoseProcessor so release is safe
         self.processor = PoseProcessor()
         mp_pose_local = mp.solutions.pose
 
@@ -272,8 +235,6 @@ class GymApp:
             frame = self.processor.read_frame()
             if frame is None:
                 break
-
-            # Voice control handling
             cmd = self.voice.get_command()
             if cmd:
                 if 'push' in cmd:
@@ -296,25 +257,17 @@ class GymApp:
                     self.running = False
                     break
 
-            # Keyboard quick keys (polling via tkinter focus)
-            # We also allow pressing keys while window focused
-            # (Tkinter key binding handled separately)
-
             out, results, w, h = self.processor.process(frame)
 
             if results and results.pose_landmarks:
                 mp.solutions.drawing_utils.draw_landmarks(out, results.pose_landmarks, mp_pose_local.POSE_CONNECTIONS)
                 land = results.pose_landmarks.landmark
-
-                # left side
                 left_shoulder = [land[mp_pose_local.PoseLandmark.LEFT_SHOULDER].x * w, land[mp_pose_local.PoseLandmark.LEFT_SHOULDER].y * h]
                 left_elbow    = [land[mp_pose_local.PoseLandmark.LEFT_ELBOW].x * w,    land[mp_pose_local.PoseLandmark.LEFT_ELBOW].y * h]
                 left_wrist    = [land[mp_pose_local.PoseLandmark.LEFT_WRIST].x * w,    land[mp_pose_local.PoseLandmark.LEFT_WRIST].y * h]
                 left_hip      = [land[mp_pose_local.PoseLandmark.LEFT_HIP].x * w,      land[mp_pose_local.PoseLandmark.LEFT_HIP].y * h]
                 left_knee     = [land[mp_pose_local.PoseLandmark.LEFT_KNEE].x * w,     land[mp_pose_local.PoseLandmark.LEFT_KNEE].y * h]
                 left_ankle    = [land[mp_pose_local.PoseLandmark.LEFT_ANKLE].x * w,    land[mp_pose_local.PoseLandmark.LEFT_ANKLE].y * h]
-
-                # right arm
                 right_shoulder = [land[mp_pose_local.PoseLandmark.RIGHT_SHOULDER].x * w, land[mp_pose_local.PoseLandmark.RIGHT_SHOULDER].y * h]
                 right_elbow    = [land[mp_pose_local.PoseLandmark.RIGHT_ELBOW].x * w,    land[mp_pose_local.PoseLandmark.RIGHT_ELBOW].y * h]
                 right_wrist    = [land[mp_pose_local.PoseLandmark.RIGHT_WRIST].x * w,    land[mp_pose_local.PoseLandmark.RIGHT_WRIST].y * h]
@@ -322,8 +275,6 @@ class GymApp:
                 elbow_angle_left = calculate_angle(left_shoulder, left_elbow, left_wrist)
                 knee_angle_left  = calculate_angle(left_hip, left_knee, left_ankle)
                 elbow_angle_right = calculate_angle(right_shoulder, right_elbow, right_wrist)
-
-                # PUSHUPS
                 if self.current_exercise in ['Push-ups', 'All Exercises']:
                     push_accuracy = accuracy_from_angle(elbow_angle_left, 40, 170)
                     if elbow_angle_left > 160:
@@ -346,8 +297,6 @@ class GymApp:
                             self.tts_debounce('Lower your chest more')
                         else:
                             self.tts_debounce('Keep your back straight')
-
-                # SQUATS
                 if self.current_exercise in ['Squats', 'All Exercises']:
                     squat_accuracy = accuracy_from_angle(knee_angle_left, 80, 165)
                     if knee_angle_left > 160:
@@ -370,8 +319,6 @@ class GymApp:
                             self.tts_debounce('Go deeper in your squat')
                         else:
                             self.tts_debounce('Keep your chest up')
-
-                # CURLS
                 if self.current_exercise in ['Bicep Curls', 'All Exercises']:
                     curl_accuracy = accuracy_from_angle(elbow_angle_right, 40, 150)
                     if elbow_angle_right > 150:
@@ -391,15 +338,12 @@ class GymApp:
                         self.tts_debounce('Nice curl')
                     if curl_accuracy < 60 and time.time() - self._last_tts > 0.7:
                         self.tts_debounce('Curl slowly and fully contract')
-
-            # Update UI stats
             self.status_var.set(f"Mode: {self.current_exercise}")
             self.push_var.set(f"Pushups: {self.pushup_count}")
             self.squat_var.set(f"Squats: {self.squat_count}")
             self.curl_var.set(f"Curls: {self.curl_count}")
             self.cal_var.set(f"Calories: {self.total_calories:.1f}")
 
-            # Convert to ImageTk
             img = cv2.cvtColor(out, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(img)
             imgtk = ImageTk.PhotoImage(image=img)
@@ -408,40 +352,25 @@ class GymApp:
             self.video_label.configure(image=imgtk)
 
         else:
-            # no landmarks: just show frame
             img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(img)
             imgtk = ImageTk.PhotoImage(image=img)
             self.video_label.imgtk = imgtk
             self.video_label.configure(image=imgtk)
-
-        # small sleep to yield
         time.sleep(0.01)
-
-        # Poll tkinter events
         try:
             self.root.update_idletasks()
         except tk.TclError:
             return
-
-        # Allow quitting by key if window focused
-        # (bind q to quit)
-
-    # End loop
         self.processor.release()
         self.running = False
-        # Auto-save when stopping
         if self.workout_log:
             fname = f"workout_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             pd.DataFrame(self.workout_log).to_csv(fname, index=False)
             print(f"Saved workout log to {fname}")
-
-# ------------------ Run ------------------
 if __name__ == '__main__':
     root = tk.Tk()
     app = GymApp(root)
-
-    # Bind keys for quick control
     def on_key(e):
         k = e.char
         if k == '1':
@@ -459,3 +388,4 @@ if __name__ == '__main__':
 
     root.protocol("WM_DELETE_WINDOW", app.on_exit)
     root.mainloop()
+
